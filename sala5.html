@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>CHAOS PONG</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000; color: #0f0;
+  font-family: 'Courier New', monospace;
+  display: flex; justify-content: center; align-items: center;
+  min-height: 100vh; overflow: hidden; user-select: none;
+}
+#wrap { display: flex; gap: 14px; align-items: flex-start; }
+canvas { border: 2px solid #0f0; display: block; cursor: none; }
+#hud { width: 176px; display: flex; flex-direction: column; gap: 8px; }
+.box { border: 1px solid #0f0; padding: 8px; font-size: 12px; }
+.box h3 { font-size: 10px; color: #060; margin-bottom: 6px; letter-spacing: 2px; }
+#scoreVal { font-size: 24px; font-weight: bold; }
+#eventName { font-size: 12px; font-weight: bold; min-height: 14px; word-break: break-word; }
+.log-item { padding: 2px 0; border-bottom: 1px solid #020; font-size: 10px; }
+.surv-item { font-size: 10px; line-height: 1.7; }
+.surv-done { color: #0f0; } .surv-todo { color: #222; }
+#overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.9);
+  display: flex; justify-content: center; align-items: center; z-index: 10;
+}
+#menu { border: 2px solid #0f0; padding: 28px 36px; text-align: center; }
+#menu h1 { font-size: 26px; letter-spacing: 4px; margin-bottom: 4px; }
+#menu p { color: #060; font-size: 10px; margin-bottom: 22px; letter-spacing: 1px; }
+.opt-group { margin-bottom: 14px; }
+.opt-label { font-size: 10px; color: #060; margin-bottom: 5px; letter-spacing: 2px; }
+.btn-row { display: flex; gap: 5px; justify-content: center; }
+button {
+  background: #000; color: #0f0; border: 1px solid #0f0;
+  padding: 5px 12px; cursor: pointer; font-family: 'Courier New', monospace;
+  font-size: 11px; letter-spacing: 1px;
+}
+button:hover { background: #010; }
+button.sel { background: #0f0; color: #000; }
+#startBtn { font-size: 15px; padding: 9px 30px; margin-top: 14px; letter-spacing: 3px; }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <div id="menu">
+    <h1>CHAOS PONG</h1>
+    <p>SINGLE PLAYER · ATARI STYLE</p>
+    <div class="opt-group">
+      <div class="opt-label">DIFICULDADE</div>
+      <div class="btn-row">
+        <button id="dEasy"  onclick="setOpt('diff','easy',this)">FÁCIL</button>
+        <button id="dMed"   onclick="setOpt('diff','medium',this)" class="sel">MÉDIO</button>
+        <button id="dHard"  onclick="setOpt('diff','hard',this)">DIFÍCIL</button>
+      </div>
+    </div>
+    <div class="opt-group">
+      <div class="opt-label">MODO DE JOGO</div>
+      <div class="btn-row">
+        <button id="mScore" onclick="setOpt('mode','score',this)" class="sel">PONTOS</button>
+        <button id="mSurv"  onclick="setOpt('mode','survival',this)">SOBREV.</button>
+        <button id="mChaos" onclick="setOpt('mode','chaos',this)">CAOS</button>
+      </div>
+    </div>
+    <div style="font-size:10px; color:#060; margin-top:10px; line-height:1.6; text-align:left;">
+      PONTOS: maior score possível<br>
+      SOBREV.: acione todos os eventos<br>
+      CAOS: efeitos acumulam a cada hit
+    </div>
+    <button id="startBtn" onclick="startGame()">JOGAR</button>
+  </div>
+</div>
+
+<div id="wrap">
+  <canvas id="c" width="480" height="560"></canvas>
+  <div id="hud">
+    <div class="box">
+      <div id="scoreVal">0</div>
+      <div style="font-size:10px;color:#060;margin-top:1px;">PONTOS</div>
+      <div style="margin-top:8px;" id="livesVal">♥ ♥ ♥</div>
+      <div style="font-size:10px;color:#060;margin-top:1px;">VIDAS</div>
+    </div>
+    <div class="box">
+      <h3>EVENTO ATIVO</h3>
+      <div id="eventName">-</div>
+    </div>
+    <div class="box">
+      <h3>HISTÓRICO</h3>
+      <div id="logList"></div>
+    </div>
+    <div class="box" id="survBox" style="display:none;">
+      <h3>SOBREVIVÊNCIA</h3>
+      <div id="survList" class="surv-item"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const DIFF = {
+  easy:   { speed: 3.5, gravity: 0.15, padSize: 120 },
+  medium: { speed: 5.5, gravity: 0.22, padSize: 90  },
+  hard:   { speed: 8.0, gravity: 0.30, padSize: 60  },
+};
+
+// prob = relative weight
+const EVENTS = [
+  { id: 'inv_gravity',  label: 'GRAVIDADE INVERTIDA', color: '#f0f', prob: 8,
+    apply(G) { G.gy = -G.gy; } },
+  { id: 'norm_gravity', label: 'GRAVIDADE NORMAL',    color: '#8ff', prob: 10,
+    apply(G) { G.gy = Math.abs(G.gy); } },
+  { id: 'pad_left',     label: 'RAQUETE → ESQUERDA',  color: '#0ff', prob: 6,
+    apply(G) { G.pad.wall = 'left'; } },
+  { id: 'pad_right',    label: 'RAQUETE → DIREITA',   color: '#0ff', prob: 6,
+    apply(G) { G.pad.wall = 'right'; } },
+  { id: 'pad_top',      label: 'RAQUETE → CIMA',      color: '#0ff', prob: 5,
+    apply(G) { G.pad.wall = 'top'; } },
+  { id: 'pad_bot',      label: 'RAQUETE → BAIXO',     color: '#0ff', prob: 5,
+    apply(G) { G.pad.wall = 'bottom'; } },
+  { id: 'add_ball',     label: '+1 BOLA!',             color: '#ff0', prob: 10,
+    apply(G) { spawnBall(G); } },
+  { id: 'shrink',       label: 'RAQUETE MENOR',        color: '#f80', prob: 14,
+    apply(G) { G.pad.size = Math.max(30, G.pad.size * 0.55); } },
+  { id: 'grow',         label: 'RAQUETE MAIOR',        color: '#8f0', prob: 9,
+    apply(G) { G.pad.size = Math.min(240, G.pad.size * 1.6); } },
+  { id: 'inv_ctrl',     label: 'CONTROLES INVERTIDOS', color: '#f44', prob: 9,
+    apply(G) { G.pad.inv = !G.pad.inv; } },
+  { id: 'turbo',        label: 'TURBO!',               color: '#f60', prob: 6,
+    apply(G) { G.balls.forEach(b => { b.vx *= 1.6; b.vy *= 1.6; }); } },
+  { id: 'slow',         label: 'CÂMERA LENTA',         color: '#66f', prob: 7,
+    apply(G) { G.balls.forEach(b => { b.vx *= 0.5; b.vy *= 0.5; }); } },
+];
+
+const TOTAL_PROB = EVENTS.reduce((s, e) => s + e.prob, 0);
+function pickEvent() {
+  let r = Math.random() * TOTAL_PROB;
+  for (const e of EVENTS) { r -= e.prob; if (r <= 0) return e; }
+  return EVENTS[EVENTS.length - 1];
+}
+
+let opts = { diff: 'medium', mode: 'score' };
+let G = {};
+let raf;
+
+function setOpt(key, val, btn) {
+  opts[key] = val;
+  const maps = {
+    diff: { easy: 'dEasy', medium: 'dMed', hard: 'dHard' },
+    mode: { score: 'mScore', survival: 'mSurv', chaos: 'mChaos' },
+  };
+  Object.values(maps[key]).forEach(id => document.getElementById(id).classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+function spawnBall(G) {
+  const spd = DIFF[opts.diff].speed;
+  G.balls.push({
+    x: W / 2, y: H / 2,
+    vx: (Math.random() < .5 ? 1 : -1) * spd * (0.8 + Math.random() * 0.4),
+    vy: -spd * (0.8 + Math.random() * 0.4),
+    r: 8,
+  });
+}
+
+function startGame() {
+  document.getElementById('overlay').style.display = 'none';
+  const d = DIFF[opts.diff];
+  G = {
+    running: true,
+    score: 0, lives: 3,
+    balls: [],
+    pad: { wall: 'bottom', pos: W / 2, size: d.padSize, inv: false },
+    gy: d.gravity,
+    curEvt: null, log: [], seenEvents: new Set(),
+    mouseX: W / 2, mouseY: H / 2,
+  };
+  spawnBall(G);
+  document.getElementById('survBox').style.display = opts.mode === 'survival' ? '' : 'none';
+  renderSurvival();
+  updateHUD();
+  if (raf) cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(loop);
+}
+
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  G.mouseX = e.clientX - r.left;
+  G.mouseY = e.clientY - r.top;
+});
+
+function padInput() {
+  const { wall, inv } = G.pad;
+  if (wall === 'bottom' || wall === 'top') return inv ? W - G.mouseX : G.mouseX;
+  return inv ? H - G.mouseY : G.mouseY;
+}
+
+function padRect() {
+  const { wall, pos, size } = G.pad;
+  const half = size / 2, th = 12;
+  if (wall === 'bottom') return { x: pos - half, y: H - th - 2, w: size, h: th };
+  if (wall === 'top')    return { x: pos - half, y: 2,          w: size, h: th };
+  if (wall === 'left')   return { x: 2,          y: pos - half, w: th,   h: size };
+  if (wall === 'right')  return { x: W - th - 2, y: pos - half, w: th,   h: size };
+}
+
+function applyEvent(evt) {
+  if (opts.mode !== 'chaos') {
+    const d = DIFF[opts.diff];
+    G.gy = Math.abs(G.gy);   // restore gravity direction (keep magnitude)
+    G.pad.inv = false;
+    G.pad.size = d.padSize;
+    if (G.balls.length > 1) G.balls.splice(1);
+  }
+  evt.apply(G);
+  G.curEvt = evt;
+  G.log.unshift(evt);
+  if (G.log.length > 6) G.log.pop();
+
+  if (opts.mode === 'survival') {
+    G.seenEvents.add(evt.id);
+    renderSurvival();
+    if (G.seenEvents.size >= EVENTS.length) { endGame(true); return; }
+  }
+  updateHUD();
+}
+
+function renderSurvival() {
+  document.getElementById('survList').innerHTML = EVENTS.map(e =>
+    `<div class="${G.seenEvents?.has(e.id) ? 'surv-done' : 'surv-todo'}">${G.seenEvents?.has(e.id) ? '✓' : '·'} ${e.label}</div>`
+  ).join('');
+}
+
+function updateHUD() {
+  document.getElementById('scoreVal').textContent = G.score;
+  document.getElementById('livesVal').textContent = '♥ '.repeat(G.lives).trim() || '—';
+  document.getElementById('eventName').textContent = G.curEvt?.label ?? '-';
+  document.getElementById('eventName').style.color  = G.curEvt?.color ?? '#0f0';
+  document.getElementById('logList').innerHTML = G.log.map(e =>
+    `<div class="log-item" style="color:${e.color}">${e.label}</div>`
+  ).join('');
+}
+
+function resetBall(b) {
+  const spd = DIFF[opts.diff].speed;
+  const d   = DIFF[opts.diff];
+  b.x = W / 2; b.y = H / 2;
+  b.vx = (Math.random() < .5 ? 1 : -1) * spd;
+  b.vy = -spd;
+  G.gy = d.gravity;
+  G.pad.wall = 'bottom';
+  G.pad.inv  = false;
+  G.pad.size = d.padSize;
+  G.curEvt   = null;
+  updateHUD();
+}
+
+function ballLost(i) {
+  if (G.balls.length > 1) { G.balls.splice(i, 1); return; }
+  G.lives--;
+  updateHUD();
+  if (G.lives <= 0) { endGame(false); return; }
+  resetBall(G.balls[0]);
+}
+
+function loop() {
+  if (!G.running) return;
+
+  // Update paddle position
+  const { size, wall } = G.pad;
+  G.pad.pos = padInput();
+  if (wall === 'bottom' || wall === 'top')
+    G.pad.pos = Math.max(size / 2, Math.min(W - size / 2, G.pad.pos));
+  else
+    G.pad.pos = Math.max(size / 2, Math.min(H - size / 2, G.pad.pos));
+
+  const pr = padRect();
+
+  for (let i = G.balls.length - 1; i >= 0; i--) {
+    const b = G.balls[i];
+    b.vy += G.gy;
+    b.x  += b.vx;
+    b.y  += b.vy;
+
+    // Speed limits
+    const spd = Math.hypot(b.vx, b.vy);
+    if (spd > 22) { b.vx = b.vx / spd * 22; b.vy = b.vy / spd * 22; }
+    if (spd < 1.5 && spd > 0) { b.vx = b.vx / spd * 1.5; b.vy = b.vy / spd * 1.5; }
+
+    const w = G.pad.wall;
+
+    // Bounce off non-paddle walls
+    if (w !== 'left'   && b.x - b.r < 0)    { b.x = b.r;     b.vx =  Math.abs(b.vx); }
+    if (w !== 'right'  && b.x + b.r > W)     { b.x = W - b.r; b.vx = -Math.abs(b.vx); }
+    if (w !== 'top'    && b.y - b.r < 0)     { b.y = b.r;     b.vy =  Math.abs(b.vy); }
+    if (w !== 'bottom' && b.y + b.r > H)     { b.y = H - b.r; b.vy = -Math.abs(b.vy); }
+
+    // Paddle hit
+    if (b.x + b.r > pr.x && b.x - b.r < pr.x + pr.w &&
+        b.y + b.r > pr.y && b.y - b.r < pr.y + pr.h) {
+
+      if (w === 'bottom') { b.vy = -Math.abs(b.vy); b.y = pr.y - b.r; }
+      if (w === 'top')    { b.vy =  Math.abs(b.vy); b.y = pr.y + pr.h + b.r; }
+      if (w === 'left')   { b.vx =  Math.abs(b.vx); b.x = pr.x + pr.w + b.r; }
+      if (w === 'right')  { b.vx = -Math.abs(b.vx); b.x = pr.x - b.r; }
+
+      if (w === 'bottom' || w === 'top') b.vx += (Math.random() - .5) * 2;
+      else                               b.vy += (Math.random() - .5) * 2;
+
+      const bonus = opts.mode === 'chaos' ? G.log.length * 5 : 0;
+      G.score += 10 + bonus;
+      applyEvent(pickEvent());
+      if (!G.running) return;
+      continue;
+    }
+
+    // Ball escapes through paddle wall
+    let lost = false;
+    if (w === 'bottom' && b.y - b.r > H) lost = true;
+    if (w === 'top'    && b.y + b.r < 0) lost = true;
+    if (w === 'left'   && b.x + b.r < 0) lost = true;
+    if (w === 'right'  && b.x - b.r > W) lost = true;
+    if (lost) { ballLost(i); if (!G.running) return; }
+  }
+
+  // --- Draw ---
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // Scanlines
+  ctx.fillStyle = 'rgba(0,8,0,0.22)';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+
+  // Border
+  ctx.strokeStyle = '#0a0'; ctx.lineWidth = 1;
+  ctx.strokeRect(1, 1, W - 2, H - 2);
+
+  // Paddle
+  const pc = G.curEvt?.color ?? '#0f0';
+  ctx.shadowBlur = 14; ctx.shadowColor = pc;
+  ctx.fillStyle = pc;
+  ctx.fillRect(pr.x, pr.y, pr.w, pr.h);
+  ctx.shadowBlur = 0;
+
+  // Balls
+  G.balls.forEach((b, i) => {
+    const bc = i === 0 ? '#0f0' : '#ff0';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = bc;
+    ctx.shadowBlur = 18; ctx.shadowColor = bc;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  });
+
+  // HUD indicators on canvas
+  ctx.font = '11px Courier New'; ctx.textAlign = 'left';
+  ctx.fillStyle = '#060';
+  ctx.fillText('G ' + (G.gy > 0 ? '↓' : '↑'), 6, 16);
+  if (G.pad.inv) { ctx.fillStyle = '#f44'; ctx.fillText('INV', 42, 16); }
+  if (G.balls.length > 1) { ctx.fillStyle = '#ff0'; ctx.textAlign = 'right'; ctx.fillText('×' + G.balls.length, W - 6, 16); ctx.textAlign = 'left'; }
+
+  raf = requestAnimationFrame(loop);
+}
+
+function endGame(won) {
+  G.running = false;
+  cancelAnimationFrame(raf);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+  const c = won ? '#0f0' : '#f00';
+  ctx.shadowBlur = 20; ctx.shadowColor = c;
+  ctx.fillStyle = c;
+  ctx.font = 'bold 30px Courier New';
+  ctx.fillText(won ? 'VOCÊ VENCEU!' : 'GAME OVER', W / 2, H / 2 - 32);
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#0f0'; ctx.font = '18px Courier New';
+  ctx.fillText('SCORE: ' + G.score, W / 2, H / 2 + 8);
+  ctx.fillStyle = '#060'; ctx.font = '12px Courier New';
+  ctx.fillText('[ clique para jogar novamente ]', W / 2, H / 2 + 44);
+  ctx.textAlign = 'left';
+
+  canvas.addEventListener('click', () => {
+    document.getElementById('overlay').style.display = 'flex';
+  }, { once: true });
+}
+</script>
+</body>
+</html>
