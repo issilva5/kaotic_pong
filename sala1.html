@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pong Caótico</title>
+  <style>
+    :root {
+      --bg: #090914;
+      --panel: rgba(255, 255, 255, 0.08);
+      --text: #f7f7ff;
+      --muted: #b9b9d6;
+      --accent: #7cf6ff;
+      --danger: #ff4d8d;
+      --warning: #ffd166;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at top left, rgba(124, 246, 255, 0.18), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(255, 77, 141, 0.16), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    .app {
+      width: min(1080px, 96vw);
+      display: grid;
+      gap: 14px;
+    }
+
+    .hud {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: 0 18px 70px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(12px);
+    }
+
+    .title {
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      font-size: clamp(18px, 3vw, 30px);
+    }
+
+    .score {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      font-size: clamp(26px, 5vw, 52px);
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .score span:nth-child(2) {
+      color: var(--muted);
+      font-size: 0.6em;
+    }
+
+    .status {
+      text-align: right;
+      color: var(--muted);
+      font-size: 14px;
+      min-height: 42px;
+    }
+
+    .status strong {
+      display: block;
+      color: var(--accent);
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .game-shell {
+      position: relative;
+      border-radius: 22px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 24px 90px rgba(0, 0, 0, 0.42);
+      background: #05050d;
+    }
+
+    canvas {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      display: block;
+      background: #070710;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(5, 5, 13, 0.72);
+      backdrop-filter: blur(8px);
+      text-align: center;
+    }
+
+    .overlay.hidden {
+      display: none;
+    }
+
+    .card {
+      max-width: 720px;
+      padding: 28px;
+      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.09);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.32);
+    }
+
+    .card h1 {
+      margin: 0 0 12px;
+      font-size: clamp(34px, 7vw, 64px);
+      line-height: 0.94;
+    }
+
+    .card p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+
+    kbd {
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.14);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      font-family: inherit;
+      font-weight: 700;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 13px 22px;
+      background: linear-gradient(135deg, var(--accent), #d7fcff);
+      color: #080814;
+      font-weight: 900;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      box-shadow: 0 10px 28px rgba(124, 246, 255, 0.24);
+      transition: transform 0.16s ease, filter 0.16s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px) scale(1.02);
+      filter: brightness(1.06);
+    }
+
+    .upgrade-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .upgrade-card {
+      padding: 16px;
+      min-height: 158px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      text-align: left;
+      box-shadow: none;
+    }
+
+    .upgrade-card:hover {
+      transform: translateY(-3px);
+      filter: brightness(1.08);
+      background: rgba(124, 246, 255, 0.16);
+    }
+
+    .upgrade-card b {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--accent);
+      font-size: 16px;
+    }
+
+    .upgrade-card span {
+      display: block;
+      color: var(--muted);
+      font-weight: 600;
+      line-height: 1.35;
+      font-size: 13px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 0 4px;
+    }
+
+    .footer b {
+      color: var(--text);
+    }
+
+    @media (max-width: 760px) {
+      body {
+        overflow: auto;
+        padding: 12px 0;
+      }
+
+      .hud {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+
+      .status {
+        text-align: center;
+      }
+
+      .footer {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      .upgrade-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="hud" aria-label="Placar e estado do jogo">
+      <div class="title">Pong Caótico</div>
+      <div class="score" aria-label="Placar">
+        <span id="playerScore">0</span>
+        <span>:</span>
+        <span id="aiScore">0</span>
+      </div>
+      <div class="status">
+        <strong id="chaosName">Caos aguardando...</strong>
+        <span id="chaosDescription">Rebata a bola para ativar eventos imprevisíveis.</span>
+      </div>
+    </section>
+
+    <section class="game-shell">
+      <canvas id="game" width="960" height="540" aria-label="Jogo Pong Caótico"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="card">
+          <h1 id="overlayTitle">Pong Caótico</h1>
+          <p id="overlayText">Rebata a bola contra a máquina. A cada rebatida, um evento surpresa muda a física, os controles ou o visual da arena.</p>
+          <div class="controls" id="controlsHelp">
+            <span><kbd>W</kbd>/<kbd>S</kbd> ou <kbd>↑</kbd>/<kbd>↓</kbd> movem a raquete</span>
+            <span><kbd>Espaço</kbd> pausa</span>
+            <span><kbd>R</kbd> reinicia</span>
+          </div>
+          <button id="startButton">Começar o caos</button>
+          <div class="upgrade-grid hidden" id="upgradeChoices"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="footer">
+      <span><b>Meta:</b> primeiro a 7 pontos vence.</span>
+      <span><b>Novo:</b> multi-bolas, obstáculos e upgrades a cada 3 acertos.</span>
+    </section>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const playerScoreEl = document.getElementById("playerScore");
+    const aiScoreEl = document.getElementById("aiScore");
+    const chaosNameEl = document.getElementById("chaosName");
+    const chaosDescriptionEl = document.getElementById("chaosDescription");
+    const overlay = document.getElementById("overlay");
+    const overlayTitle = document.getElementById("overlayTitle");
+    const overlayText = document.getElementById("overlayText");
+    const controlsHelp = document.getElementById("controlsHelp");
+    const startButton = document.getElementById("startButton");
+    const upgradeChoices = document.getElementById("upgradeChoices");
+
+    const W = canvas.width;
+    const H = canvas.height;
+    const winningScore = 7;
+    const maxBalls = 9;
+    const maxObstacles = 6;
+
+    const keys = new Set();
+    let lastTime = 0;
+    let running = false;
+    let paused = false;
+    let choosingUpgrade = false;
+    let flashTime = 0;
+    let shakeTime = 0;
+    let screenShake = 0;
+    let rally = 0;
+    let gravity = 0;
+    let spin = 0;
+    let controlInvertedUntil = 0;
+    let tinyPaddleUntil = 0;
+    let giantPaddleUntil = 0;
+    let ghostBallUntil = 0;
+    let aiConfusedUntil = 0;
+    let playerSlowAuraUntil = 0;
+    let playerMagnetUntil = 0;
+    let backgroundHue = 205;
+    let chaosMessageTime = 0;
+    let playerHits = 0;
+    let obstacleSpawnClock = 0;
+    let nextBallId = 1;
+
+    const player = createPaddle(36, H / 2 - 58, 16, 116, 545);
+    const ai = createPaddle(W - 52, H / 2 - 58, 16, 116, 480);
+    let balls = [];
+    let obstacles = [];
+
+    const upgradePool = [
+      {
+        name: "Raquete Titã",
+        description: "Aumenta permanentemente sua raquete em 18%. Acumula até ficar ridícula.",
+        apply() {
+          player.baseHeight = Math.min(player.baseHeight * 1.18, 210);
+          player.height = player.baseHeight;
+        }
+      },
+      {
+        name: "Freio Quântico",
+        description: "Reduz a velocidade de todas as bolinhas agora e cria uma aura lenta por 10s.",
+        apply(now) {
+          playerSlowAuraUntil = now + 10000;
+          for (const b of balls) b.speedMultiplier = Math.max(0.72, b.speedMultiplier * 0.78);
+        }
+      },
+      {
+        name: "Escudo Lateral",
+        description: "Ganha 1 escudo. Ele salva uma bolinha que passaria por você.",
+        apply() {
+          player.shields = Math.min(player.shields + 1, 3);
+        }
+      },
+      {
+        name: "Limpador de Campo",
+        description: "Remove obstáculos e corta a quantidade de bolinhas pela metade.",
+        apply() {
+          obstacles = [];
+          halveBalls();
+        }
+      },
+      {
+        name: "Ímã Vertical",
+        description: "Por 12s, sua raquete puxa bolinhas próximas para o centro dela.",
+        apply(now) {
+          playerMagnetUntil = now + 12000;
+        }
+      },
+      {
+        name: "Caos Controlado",
+        description: "Duplica uma bolinha a seu favor, mas limita a velocidade geral.",
+        apply() {
+          multiplyBalls(1);
+          for (const b of balls) b.speedMultiplier = Math.min(b.speedMultiplier, 1.15);
+        }
+      }
+    ];
+
+    const chaosEvents = [
+      {
+        name: "Bola Mutante",
+        description: "Uma das bolinhas muda de tamanho no meio do rali.",
+        apply(now, hitBall) {
+          hitBall.radius = randomChoice([7, 10, 14, 20, 26]);
+          hitBall.speedMultiplier *= hitBall.radius > 18 ? 0.94 : 1.05;
+        }
+      },
+      {
+        name: "Mitose de Bolinhas",
+        description: "A rebatida multiplicou as bolinhas em campo.",
+        apply() {
+          multiplyBalls(Math.random() < 0.35 ? 2 : 1);
+        }
+      },
+      {
+        name: "Colapso Quântico",
+        description: "Metade das bolinhas sumiu. Por enquanto.",
+        apply() {
+          halveBalls();
+        }
+      },
+      {
+        name: "Controles Invertidos",
+        description: "Por alguns segundos, cima vira baixo e baixo vira cima.",
+        apply(now) {
+          controlInvertedUntil = now + 4200;
+        }
+      },
+      {
+        name: "Gravidade Torta",
+        description: "As bolinhas passam a ser puxadas para cima ou para baixo.",
+        apply() {
+          gravity = randomBetween(-760, 760);
+        }
+      },
+      {
+        name: "Flash Cósmico",
+        description: "A arena pisca e muda de cor.",
+        apply() {
+          flashTime = 0.34;
+          backgroundHue = Math.floor(randomBetween(0, 360));
+        }
+      },
+      {
+        name: "Turbo Imprudente",
+        description: "As bolinhas aceleram. Boa sorte acompanhando isso.",
+        apply() {
+          for (const b of balls) b.speedMultiplier = Math.min(b.speedMultiplier + 0.13, 2.05);
+        }
+      },
+      {
+        name: "Raquete Minúscula",
+        description: "Sua raquete encolhe temporariamente.",
+        apply(now) {
+          tinyPaddleUntil = now + 4500;
+        }
+      },
+      {
+        name: "Raquete Gigante",
+        description: "Sua raquete cresce por tempo limitado.",
+        apply(now) {
+          giantPaddleUntil = now + 3900;
+        }
+      },
+      {
+        name: "Bola Fantasma",
+        description: "As bolinhas deixam rastros e ficam mais difíceis de ler.",
+        apply(now) {
+          ghostBallUntil = now + 5200;
+        }
+      },
+      {
+        name: "IA Confusa",
+        description: "A máquina perde precisão por alguns segundos.",
+        apply(now) {
+          aiConfusedUntil = now + 4300;
+        }
+      },
+      {
+        name: "Soco na Câmera",
+        description: "A tela treme depois da rebatida.",
+        apply() {
+          shakeTime = 0.25;
+          screenShake = 9;
+        }
+      },
+      {
+        name: "Spin Maluco",
+        description: "As bolinhas ganham uma curva inesperada.",
+        apply() {
+          spin = randomBetween(-520, 520);
+        }
+      },
+      {
+        name: "Obstáculo Intruso",
+        description: "Um bloqueio temporário surgiu no campo.",
+        apply(now) {
+          spawnObstacle(now);
+        }
+      }
+    ];
+
+    function createPaddle(x, y, width, height, speed) {
+      return { x, y, width, height, baseHeight: height, speed, score: 0, shields: 0 };
+    }
+
+    function createBall(options = {}) {
+      const direction = options.direction ?? (Math.random() > 0.5 ? 1 : -1);
+      return {
+        id: nextBallId++,
+        x: options.x ?? W / 2,
+        y: options.y ?? H / 2,
+        radius: options.radius ?? 12,
+        vx: options.vx ?? direction * randomBetween(330, 410),
+        vy: options.vy ?? randomBetween(-180, 180),
+        speedMultiplier: options.speedMultiplier ?? 1,
+        trail: [],
+        hue: options.hue ?? Math.floor(randomBetween(175, 335))
+      };
+    }
+
+    function randomBetween(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function randomChoice(items) {
+      return items[Math.floor(Math.random() * items.length)];
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function shuffle(items) {
+      return [...items].sort(() => Math.random() - 0.5);
+    }
+
+    function resetBall(direction = Math.random() > 0.5 ? 1 : -1) {
+      balls = [createBall({ direction })];
+      gravity = 0;
+      spin = 0;
+      rally = 0;
+      flashTime = 0.22;
+      chaosNameEl.textContent = "Novo rali";
+      chaosDescriptionEl.textContent = "A física voltou ao normal... por enquanto.";
+      chaosMessageTime = performance.now() + 1200;
+    }
+
+    function resetGame() {
+      player.score = 0;
+      ai.score = 0;
+      player.baseHeight = 116;
+      player.height = player.baseHeight;
+      player.shields = 0;
+      playerHits = 0;
+      player.y = H / 2 - player.baseHeight / 2;
+      ai.y = H / 2 - ai.baseHeight / 2;
+      controlInvertedUntil = 0;
+      tinyPaddleUntil = 0;
+      giantPaddleUntil = 0;
+      ghostBallUntil = 0;
+      aiConfusedUntil = 0;
+      playerSlowAuraUntil = 0;
+      playerMagnetUntil = 0;
+      screenShake = 0;
+      obstacles = [];
+      updateScore();
+      resetBall(Math.random() > 0.5 ? 1 : -1);
+    }
+
+    function updateScore() {
+      playerScoreEl.textContent = player.score;
+      aiScoreEl.textContent = ai.score;
+    }
+
+    function startGame() {
+      overlay.classList.add("hidden");
+      upgradeChoices.classList.add("hidden");
+      startButton.classList.remove("hidden");
+      resetGame();
+      running = true;
+      paused = false;
+      choosingUpgrade = false;
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    }
+
+    function pauseToggle() {
+      if (!running || choosingUpgrade) return;
+      paused = !paused;
+      overlay.classList.toggle("hidden", !paused);
+      if (paused) {
+        overlayTitle.textContent = "Pausado";
+        overlayText.textContent = "O caos está temporariamente contido.";
+        controlsHelp.classList.remove("hidden");
+        upgradeChoices.classList.add("hidden");
+        startButton.classList.remove("hidden");
+        startButton.textContent = "Continuar";
+      } else {
+        overlay.classList.add("hidden");
+        lastTime = performance.now();
+        requestAnimationFrame(loop);
+      }
+    }
+
+    function endGame(winner) {
+      running = false;
+      paused = false;
+      choosingUpgrade = false;
+      overlay.classList.remove("hidden");
+      controlsHelp.classList.remove("hidden");
+      upgradeChoices.classList.add("hidden");
+      startButton.classList.remove("hidden");
+      overlayTitle.textContent = winner === "player" ? "Você venceu!" : "A máquina venceu!";
+      overlayText.textContent = winner === "player"
+        ? "Você sobreviveu ao Pong Caótico. Quer tentar vencer com mais estilo?"
+        : "A IA surfou melhor no caos. Hora de pedir revanche.";
+      startButton.textContent = "Jogar de novo";
+    }
+
+    function loop(now) {
+      if (!running || paused) return;
+      const dt = Math.min((now - lastTime) / 1000, 0.033);
+      lastTime = now;
+
+      update(dt, now);
+      render(now);
+
+      requestAnimationFrame(loop);
+    }
+
+    function update(dt, now) {
+      updatePaddleSizes(now);
+      updatePlayer(dt, now);
+      updateAI(dt, now);
+      updateBalls(dt, now);
+      updateObstacles(dt, now);
+      maybeSpawnObstacleFromTime(dt, now);
+      updateTimers(dt, now);
+    }
+
+    function updatePaddleSizes(now) {
+      if (now < tinyPaddleUntil) {
+        player.height = player.baseHeight * 0.55;
+      } else if (now < giantPaddleUntil) {
+        player.height = player.baseHeight * 1.55;
+      } else {
+        player.height = player.baseHeight;
+      }
+
+      ai.height = ai.baseHeight;
+      player.y = clamp(player.y, 0, H - player.height);
+      ai.y = clamp(ai.y, 0, H - ai.height);
+    }
+
+    function updatePlayer(dt, now) {
+      const up = keys.has("w") || keys.has("arrowup");
+      const down = keys.has("s") || keys.has("arrowdown");
+      let axis = 0;
+
+      if (up) axis -= 1;
+      if (down) axis += 1;
+      if (now < controlInvertedUntil) axis *= -1;
+
+      player.y += axis * player.speed * dt;
+      player.y = clamp(player.y, 0, H - player.height);
+    }
+
+    function updateAI(dt, now) {
+      const center = ai.y + ai.height / 2;
+      const targetBall = getMostThreateningBallForAI();
+      const predictedY = targetBall ? targetBall.y + targetBall.vy * 0.18 : H / 2;
+      const confusion = now < aiConfusedUntil ? randomBetween(-145, 145) : 0;
+      const target = predictedY + confusion;
+      const difficulty = now < aiConfusedUntil ? 0.58 : 0.82;
+      const direction = Math.sign(target - center);
+      const distance = Math.abs(target - center);
+      const speed = ai.speed * difficulty * clamp(distance / 90, 0.35, 1.15);
+
+      ai.y += direction * speed * dt;
+      ai.y = clamp(ai.y, 0, H - ai.height);
+    }
+
+    function getMostThreateningBallForAI() {
+      const incoming = balls.filter(b => b.vx > 0);
+      if (!incoming.length) return balls[0];
+      return incoming.sort((a, b) => b.x - a.x)[0];
+    }
+
+    function updateBalls(dt, now) {
+      const survivors = [];
+
+      for (const ball of balls) {
+        const auraSlow = now < playerSlowAuraUntil && ball.x < W * 0.42 ? 0.82 : 1;
+
+        if (now < playerMagnetUntil && ball.x < W * 0.45 && ball.vx < 0) {
+          const playerCenter = player.y + player.height / 2;
+          ball.vy += (playerCenter - ball.y) * 2.1 * dt;
+        }
+
+        ball.vy += (gravity + spin) * dt;
+        ball.x += ball.vx * ball.speedMultiplier * auraSlow * dt;
+        ball.y += ball.vy * ball.speedMultiplier * auraSlow * dt;
+
+        updateTrail(ball, dt, now);
+        collideWithWalls(ball);
+        collideWithObstacles(ball, now);
+
+        if (collides(ball, player) && ball.vx < 0) {
+          reboundFromPaddle(ball, player, 1, now, "player");
+        }
+
+        if (collides(ball, ai) && ball.vx > 0) {
+          reboundFromPaddle(ball, ai, -1, now, "ai");
+        }
+
+        if (ball.x + ball.radius < 0) {
+          if (player.shields > 0) {
+            player.shields -= 1;
+            ball.x = player.x + player.width + ball.radius;
+            ball.y = player.y + player.height / 2;
+            ball.vx = Math.abs(ball.vx) * 1.06;
+            ball.vy = randomBetween(-190, 190);
+            triggerStatus("Escudo ativado", "Uma bolinha foi salva e devolvida ao caos.", now);
+            survivors.push(ball);
+          } else {
+            ai.score += 1;
+            flashTime = 0.18;
+          }
+          continue;
+        }
+
+        if (ball.x - ball.radius > W) {
+          player.score += 1;
+          flashTime = 0.18;
+          continue;
+        }
+
+        survivors.push(ball);
+      }
+
+      balls = survivors;
+      updateScore();
+
+      if (player.score >= winningScore) return endGame("player");
+      if (ai.score >= winningScore) return endGame("ai");
+
+      if (running && !balls.length) {
+        resetBall(Math.random() > 0.5 ? 1 : -1);
+      }
+    }
+
+    function updateTrail(ball, dt, now) {
+      if (now < ghostBallUntil || balls.length > 1) {
+        ball.trail.push({ x: ball.x, y: ball.y, radius: ball.radius, life: 0.52, hue: ball.hue });
+        if (ball.trail.length > 22) ball.trail.shift();
+      } else {
+        ball.trail.length = 0;
+      }
+
+      for (const point of ball.trail) point.life -= dt;
+      ball.trail = ball.trail.filter(point => point.life > 0);
+    }
+
+    function collideWithWalls(ball) {
+      if (ball.y - ball.radius < 0) {
+        ball.y = ball.radius;
+        ball.vy = Math.abs(ball.vy) * 0.94;
+        gravity *= -0.7;
+      }
+
+      if (ball.y + ball.radius > H) {
+        ball.y = H - ball.radius;
+        ball.vy = -Math.abs(ball.vy) * 0.94;
+        gravity *= -0.7;
+      }
+    }
+
+    function collideWithObstacles(ball, now) {
+      for (const obstacle of obstacles) {
+        if (!circleRectCollides(ball, obstacle)) continue;
+
+        const obstacleCenterX = obstacle.x + obstacle.width / 2;
+        const obstacleCenterY = obstacle.y + obstacle.height / 2;
+        const dx = ball.x - obstacleCenterX;
+        const dy = ball.y - obstacleCenterY;
+
+        if (Math.abs(dx / obstacle.width) > Math.abs(dy / obstacle.height)) {
+          ball.vx *= -1.04;
+          ball.x += Math.sign(dx || ball.vx) * 8;
+        } else {
+          ball.vy *= -1.04;
+          ball.y += Math.sign(dy || ball.vy) * 8;
+        }
+
+        obstacle.life -= 1200;
+        flashTime = Math.max(flashTime, 0.08);
+        triggerStatus("Obstáculo atingido", "A bolinha rebateu num bloqueio temporário.", now, 900);
+      }
+    }
+
+    function circleRectCollides(ball, rect) {
+      const closestX = clamp(ball.x, rect.x, rect.x + rect.width);
+      const closestY = clamp(ball.y, rect.y, rect.y + rect.height);
+      const dx = ball.x - closestX;
+      const dy = ball.y - closestY;
+      return dx * dx + dy * dy <= ball.radius * ball.radius;
+    }
+
+    function updateObstacles(dt) {
+      for (const obstacle of obstacles) obstacle.life -= dt * 1000;
+      obstacles = obstacles.filter(obstacle => obstacle.life > 0);
+    }
+
+    function maybeSpawnObstacleFromTime(dt, now) {
+      obstacleSpawnClock += dt;
+      if (obstacleSpawnClock < 1) return;
+      obstacleSpawnClock = 0;
+
+      const chance = Math.min(0.05 + rally * 0.003, 0.16);
+      if (Math.random() < chance) spawnObstacle(now);
+    }
+
+    function spawnObstacle(now) {
+      if (obstacles.length >= maxObstacles) obstacles.shift();
+
+      const width = randomBetween(24, 42);
+      const height = randomBetween(70, 150);
+      const x = randomBetween(W * 0.26, W * 0.74);
+      const y = randomBetween(60, H - height - 60);
+
+      obstacles.push({
+        x,
+        y,
+        width,
+        height,
+        life: randomBetween(5200, 8800),
+        hue: Math.floor(randomBetween(0, 360))
+      });
+
+      if (now) {
+        triggerStatus("Obstáculo Intruso", "Um bloqueio temporário apareceu no campo.", now, 1200);
+      }
+    }
+
+    function collides(b, p) {
+      const closestX = clamp(b.x, p.x, p.x + p.width);
+      const closestY = clamp(b.y, p.y, p.y + p.height);
+      const dx = b.x - closestX;
+      const dy = b.y - closestY;
+      return dx * dx + dy * dy <= b.radius * b.radius;
+    }
+
+    function reboundFromPaddle(ball, paddle, direction, now, hitter) {
+      const paddleCenter = paddle.y + paddle.height / 2;
+      const relativeHit = (ball.y - paddleCenter) / (paddle.height / 2);
+      const angle = relativeHit * 0.95;
+      const baseSpeed = 380 + rally * 10;
+
+      ball.x = direction > 0 ? paddle.x + paddle.width + ball.radius : paddle.x - ball.radius;
+      ball.vx = direction * baseSpeed * Math.cos(angle);
+      ball.vy = baseSpeed * Math.sin(angle) + randomBetween(-38, 38);
+      ball.speedMultiplier = Math.min(ball.speedMultiplier + 0.032, 1.75);
+      rally += 1;
+
+      if (hitter === "player") {
+        playerHits += 1;
+      }
+
+      triggerChaos(now, ball, hitter);
+
+      if (hitter === "player" && playerHits > 0 && playerHits % 3 === 0) {
+        showUpgradeMenu(now);
+      }
+    }
+
+    function triggerChaos(now, hitBall, hitter) {
+      const event = randomChoice(chaosEvents);
+      event.apply(now, hitBall, hitter);
+
+      if (Math.random() < 0.22) spawnObstacle(now);
+      if (hitter === "player" && Math.random() < 0.22) multiplyBalls(1, hitBall);
+      if (hitter === "ai" && Math.random() < 0.16) halveBalls();
+
+      triggerStatus(event.name, event.description, now, 2600);
+    }
+
+    function triggerStatus(name, description, now, duration = 2600) {
+      chaosNameEl.textContent = name;
+      chaosDescriptionEl.textContent = description;
+      chaosMessageTime = now + duration;
+    }
+
+    function multiplyBalls(amount = 1, sourceBall = null) {
+      const source = sourceBall || balls[0] || createBall();
+      for (let i = 0; i < amount && balls.length < maxBalls; i++) {
+        const angle = randomBetween(-0.72, 0.72);
+        const direction = Math.sign(source.vx || 1);
+        const speed = randomBetween(340, 460);
+        balls.push(createBall({
+          x: clamp(source.x + randomBetween(-10, 10), 80, W - 80),
+          y: clamp(source.y + randomBetween(-22, 22), 60, H - 60),
+          radius: clamp(source.radius + randomBetween(-3, 3), 7, 23),
+          vx: direction * speed * Math.cos(angle),
+          vy: speed * Math.sin(angle),
+          speedMultiplier: Math.max(0.9, Math.min(source.speedMultiplier * randomBetween(0.88, 1.08), 1.55)),
+          hue: Math.floor(randomBetween(0, 360))
+        }));
+      }
+    }
+
+    function halveBalls() {
+      if (balls.length <= 1) return;
+      const targetCount = Math.max(1, Math.ceil(balls.length / 2));
+      balls = shuffle(balls).slice(0, targetCount);
+    }
+
+    function showUpgradeMenu(now) {
+      choosingUpgrade = true;
+      paused = true;
+      overlay.classList.remove("hidden");
+      controlsHelp.classList.add("hidden");
+      startButton.classList.add("hidden");
+      upgradeChoices.classList.remove("hidden");
+      overlayTitle.textContent = "Escolha um upgrade";
+      overlayText.textContent = `Você acertou ${playerHits} rebatidas. Escolha 1 poder para sobreviver ao próximo caos.`;
+      upgradeChoices.innerHTML = "";
+
+      const options = shuffle(upgradePool).slice(0, 3);
+      for (const upgrade of options) {
+        const button = document.createElement("button");
+        button.className = "upgrade-card";
+        button.innerHTML = `<b>${upgrade.name}</b><span>${upgrade.description}</span>`;
+        button.addEventListener("click", () => {
+          upgrade.apply(performance.now());
+          choosingUpgrade = false;
+          paused = false;
+          overlay.classList.add("hidden");
+          controlsHelp.classList.remove("hidden");
+          startButton.classList.remove("hidden");
+          upgradeChoices.classList.add("hidden");
+          triggerStatus("Upgrade aplicado", upgrade.name + " entrou em ação.", performance.now(), 1800);
+          lastTime = performance.now();
+          requestAnimationFrame(loop);
+        });
+        upgradeChoices.appendChild(button);
+      }
+    }
+
+    function updateTimers(dt, now) {
+      flashTime = Math.max(0, flashTime - dt);
+      shakeTime = Math.max(0, shakeTime - dt);
+      screenShake = shakeTime > 0 ? screenShake * 0.92 : 0;
+
+      if (Math.abs(gravity) > 1) gravity *= Math.pow(0.92, dt * 6);
+      if (Math.abs(spin) > 1) spin *= Math.pow(0.88, dt * 6);
+
+      if (now > chaosMessageTime && running) {
+        const effects = [];
+        if (now < controlInvertedUntil) effects.push("Controles invertidos");
+        if (now < tinyPaddleUntil) effects.push("Raquete pequena");
+        if (now < giantPaddleUntil) effects.push("Raquete gigante");
+        if (now < ghostBallUntil) effects.push("Bola fantasma");
+        if (now < aiConfusedUntil) effects.push("IA confusa");
+        if (now < playerSlowAuraUntil) effects.push("Aura lenta");
+        if (now < playerMagnetUntil) effects.push("Ímã ativo");
+        if (player.shields > 0) effects.push(`${player.shields} escudo(s)`);
+        if (Math.abs(gravity) > 30) effects.push("Gravidade instável");
+        if (Math.abs(spin) > 40) effects.push("Spin ativo");
+        if (obstacles.length) effects.push(`${obstacles.length} obstáculo(s)`);
+        if (balls.length > 1) effects.push(`${balls.length} bolinhas`);
+
+        chaosNameEl.textContent = "Caos em andamento";
+        chaosDescriptionEl.textContent = effects.length ? effects.join(" · ") : "A próxima rebatida deve piorar tudo.";
+      }
+    }
+
+    function render(now) {
+      const shakeX = screenShake ? randomBetween(-screenShake, screenShake) : 0;
+      const shakeY = screenShake ? randomBetween(-screenShake, screenShake) : 0;
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+
+      drawBackground(now);
+      drawCenterLine();
+      drawObstacles(now);
+      drawPaddle(player, now < controlInvertedUntil ? "#ff4d8d" : "#7cf6ff");
+      drawPaddle(ai, now < aiConfusedUntil ? "#ffd166" : "#f7f7ff");
+      for (const ball of balls) drawBall(ball, now);
+      drawActiveBadges(now);
+
+      ctx.restore();
+    }
+
+    function drawBackground(now) {
+      const pulse = flashTime > 0 ? 70 : 0;
+      const hue = (backgroundHue + Math.sin(now / 600) * 10) % 360;
+      ctx.fillStyle = `hsl(${hue}, ${34 + pulse}%, ${5 + pulse / 7}%)`;
+      ctx.fillRect(-40, -40, W + 80, H + 80);
+
+      const gradient = ctx.createRadialGradient(W * 0.52, H * 0.5, 80, W * 0.52, H * 0.5, W * 0.7);
+      gradient.addColorStop(0, "rgba(124, 246, 255, 0.09)");
+      gradient.addColorStop(0.42, "rgba(255, 77, 141, 0.04)");
+      gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.strokeStyle = "rgba(255,255,255,0.045)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < W; x += 48) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H);
+        ctx.stroke();
+      }
+      for (let y = 0; y < H; y += 48) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+    }
+
+    function drawCenterLine() {
+      ctx.setLineDash([14, 16]);
+      ctx.strokeStyle = "rgba(255,255,255,0.28)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(W / 2, 24);
+      ctx.lineTo(W / 2, H - 24);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function drawObstacles(now) {
+      for (const obstacle of obstacles) {
+        const alpha = clamp(obstacle.life / 1800, 0.18, 0.9);
+        ctx.save();
+        ctx.shadowColor = `hsla(${obstacle.hue}, 100%, 65%, 0.85)`;
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = `hsla(${obstacle.hue}, 85%, 62%, ${alpha * 0.45})`;
+        ctx.strokeStyle = `hsla(${obstacle.hue}, 100%, 78%, ${alpha})`;
+        ctx.lineWidth = 2;
+        roundRect(ctx, obstacle.x, obstacle.y, obstacle.width, obstacle.height, 12);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function drawPaddle(paddle, color) {
+      ctx.save();
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = color;
+      roundRect(ctx, paddle.x, paddle.y, paddle.width, paddle.height, 10);
+      ctx.fill();
+
+      if (paddle === player && player.shields > 0) {
+        ctx.strokeStyle = "rgba(124,246,255,0.8)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(paddle.x + paddle.width / 2, paddle.y + paddle.height / 2, paddle.height * 0.62, -Math.PI / 2, Math.PI / 2);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawBall(ball, now) {
+      if (ball.trail.length) {
+        for (const point of ball.trail) {
+          ctx.beginPath();
+          ctx.fillStyle = `hsla(${point.hue}, 100%, 70%, ${point.life * 0.32})`;
+          ctx.arc(point.x, point.y, point.radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      const glow = 18 + Math.sin(now / 80 + ball.id) * 5;
+      ctx.save();
+      ctx.shadowColor = `hsl(${ball.hue}, 100%, 72%)`;
+      ctx.shadowBlur = glow;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.fillStyle = `hsla(${ball.hue}, 100%, 68%, 0.9)`;
+      ctx.arc(ball.x - ball.radius * 0.25, ball.y - ball.radius * 0.25, Math.max(2, ball.radius * 0.22), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawActiveBadges(now) {
+      const badges = [];
+      if (balls.length > 1) badges.push(`${balls.length} BOLAS`);
+      if (obstacles.length) badges.push(`${obstacles.length} OBST.`);
+      if (now < controlInvertedUntil) badges.push("INVERTIDO");
+      if (now < tinyPaddleUntil) badges.push("RAQUETE -");
+      if (now < giantPaddleUntil) badges.push("RAQUETE +");
+      if (now < ghostBallUntil) badges.push("FANTASMA");
+      if (now < aiConfusedUntil) badges.push("IA ?");
+      if (now < playerSlowAuraUntil) badges.push("AURA LENTA");
+      if (now < playerMagnetUntil) badges.push("ÍMÃ");
+      if (player.shields > 0) badges.push(`ESCUDO ${player.shields}`);
+      if (Math.abs(gravity) > 30) badges.push("GRAVIDADE");
+      if (Math.abs(spin) > 40) badges.push("SPIN");
+      badges.push(`HITS ${playerHits}/3`);
+
+      ctx.font = "700 13px Inter, system-ui, sans-serif";
+      ctx.textBaseline = "top";
+      let x = 18;
+      let y = 16;
+      for (const badge of badges) {
+        const width = ctx.measureText(badge).width + 22;
+        if (x + width > W - 18) {
+          x = 18;
+          y += 36;
+        }
+        ctx.fillStyle = "rgba(255,255,255,0.11)";
+        roundRect(ctx, x, y, width, 28, 14);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.86)";
+        ctx.fillText(badge, x + 11, y + 7);
+        x += width + 8;
+      }
+    }
+
+    function roundRect(context, x, y, width, height, radius) {
+      const r = Math.min(radius, width / 2, height / 2);
+      context.beginPath();
+      context.moveTo(x + r, y);
+      context.arcTo(x + width, y, x + width, y + height, r);
+      context.arcTo(x + width, y + height, x, y + height, r);
+      context.arcTo(x, y + height, x, y, r);
+      context.arcTo(x, y, x + width, y, r);
+      context.closePath();
+    }
+
+    startButton.addEventListener("click", () => {
+      if (!running || player.score >= winningScore || ai.score >= winningScore) {
+        overlayTitle.textContent = "Pong Caótico";
+        overlayText.textContent = "Rebata a bola contra a máquina. A cada rebatida, um evento surpresa muda a física, os controles ou o visual da arena.";
+        controlsHelp.classList.remove("hidden");
+        upgradeChoices.classList.add("hidden");
+        startButton.textContent = "Começar o caos";
+        startGame();
+      } else if (paused) {
+        pauseToggle();
+      }
+    });
+
+    window.addEventListener("keydown", event => {
+      const key = event.key.toLowerCase();
+      keys.add(key);
+
+      if (["arrowup", "arrowdown", " "].includes(key)) {
+        event.preventDefault();
+      }
+
+      if (key === " " || key === "spacebar") {
+        pauseToggle();
+      }
+
+      if (key === "r") {
+        overlay.classList.add("hidden");
+        upgradeChoices.classList.add("hidden");
+        resetGame();
+        running = true;
+        paused = false;
+        choosingUpgrade = false;
+        lastTime = performance.now();
+        requestAnimationFrame(loop);
+      }
+    });
+
+    window.addEventListener("keyup", event => {
+      keys.delete(event.key.toLowerCase());
+    });
+
+    render(performance.now());
+  </script>
+</body>
+</html>

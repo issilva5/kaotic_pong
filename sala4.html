@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pong Caótico</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+      transition: background 0.1s;
+    }
+    #header {
+      color: #fff;
+      font-size: 22px;
+      letter-spacing: 4px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+    #scores {
+      color: #fff;
+      font-size: 36px;
+      letter-spacing: 20px;
+      margin-bottom: 8px;
+      text-shadow: 0 0 10px currentColor;
+    }
+    #chaos-msg {
+      color: #ff0;
+      font-size: 16px;
+      min-height: 22px;
+      letter-spacing: 2px;
+      margin-bottom: 6px;
+      text-shadow: 0 0 8px #ff0;
+      transition: opacity 0.3s;
+    }
+    canvas {
+      display: block;
+      border: 2px solid #333;
+      box-shadow: 0 0 30px #222;
+    }
+    #controls {
+      color: #555;
+      font-size: 12px;
+      margin-top: 8px;
+      letter-spacing: 1px;
+    }
+    #overlay {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.75);
+      color: #fff;
+      z-index: 10;
+    }
+    #overlay h1 { font-size: 48px; letter-spacing: 6px; margin-bottom: 20px; color: #f0f; text-shadow: 0 0 20px #f0f; }
+    #overlay h2 { font-size: 36px; letter-spacing: 4px; margin-bottom: 16px; color: #ff0; text-shadow: 0 0 20px #ff0; display: none; }
+    #overlay p  { font-size: 16px; color: #aaa; margin-bottom: 10px; }
+    #overlay .key { color: #ff0; }
+    #overlay .winner { font-size: 20px; color: #fff; margin-bottom: 6px; display: none; }
+    #start-btn {
+      margin-top: 24px;
+      padding: 12px 36px;
+      font-size: 20px;
+      background: #f0f;
+      color: #000;
+      border: none;
+      cursor: pointer;
+      letter-spacing: 3px;
+      font-family: 'Courier New', monospace;
+      text-transform: uppercase;
+    }
+    #start-btn:hover { background: #fff; }
+    #mode-select { display: flex; gap: 12px; margin-bottom: 10px; }
+    #difficulty-select { display: flex; gap: 10px; margin-bottom: 4px; }
+    .mode-btn, .diff-btn {
+      padding: 8px 20px;
+      font-size: 13px;
+      background: #111;
+      color: #aaa;
+      border: 2px solid #444;
+      cursor: pointer;
+      letter-spacing: 2px;
+      font-family: 'Courier New', monospace;
+      text-transform: uppercase;
+      transition: all 0.15s;
+    }
+    .mode-btn:hover, .diff-btn:hover { border-color: #f0f; color: #f0f; }
+    .mode-btn.active { background: #f0f; color: #000; border-color: #f0f; }
+    .diff-btn.active { background: #ff0; color: #000; border-color: #ff0; }
+  </style>
+</head>
+<body>
+
+<div id="overlay">
+  <h1>⚡ PONG CAÓTICO ⚡</h1>
+  <h2 id="overlay-title"></h2>
+  <p class="winner" id="overlay-winner"></p>
+  <p id="overlay-sub1">A cada rebatida, o <span class="key">CAOS</span> aumenta!</p>
+  <p id="overlay-sub2"><span class="key">J1 (Esq):</span> W / S &nbsp;&nbsp; <span class="key">J2 (Dir):</span> ↑ / ↓</p>
+  <p><span class="key">Pausa:</span> P &nbsp;|&nbsp; <span class="key">ENTER</span></p>
+  <div id="mode-select">
+    <button class="mode-btn active" data-mode="pve">👤 VS IA</button>
+    <button class="mode-btn" data-mode="pvp">👥 2 JOGADORES</button>
+  </div>
+  <div id="difficulty-select">
+    <button class="diff-btn" data-diff="easy">FÁCIL</button>
+    <button class="diff-btn active" data-diff="normal">NORMAL</button>
+    <button class="diff-btn" data-diff="hard">DIFÍCIL</button>
+  </div>
+  <button id="start-btn">JOGAR</button>
+</div>
+
+<div id="header">⚡ Pong Caótico ⚡</div>
+<div id="scores"><span id="s1">0</span> : <span id="s2">0</span></div>
+<div id="chaos-msg" id="chaos-msg"></div>
+<canvas id="c"></canvas>
+<div id="controls">J1: W/S &nbsp;|&nbsp; <span id="ctrl-j2">J2: ↑/↓</span> &nbsp;|&nbsp; Pausa: P</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const W = 800, H = 500;
+canvas.width = W; canvas.height = H;
+
+const WIN_SCORE = 7;
+const PAD_W = 12, PAD_SPEED = 6;
+
+// ── Mode / Difficulty ──────────────────────────────────
+let gameMode = 'pve';   // 'pve' | 'pvp'
+let aiDiff   = 'normal'; // 'easy' | 'normal' | 'hard'
+
+const AI_PARAMS = {
+  easy:   { speedMult: 0.55, errorRange: 60 },
+  normal: { speedMult: 0.78, errorRange: 28 },
+  hard:   { speedMult: 0.96, errorRange: 8  },
+};
+
+// Wire mode/difficulty buttons
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    gameMode = btn.dataset.mode;
+    document.getElementById('difficulty-select').style.opacity = gameMode === 'pve' ? '1' : '0.3';
+  });
+});
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    aiDiff = btn.dataset.diff;
+  });
+});
+
+// ── State ──────────────────────────────────────────────
+let score = [0, 0];
+let paused = false;
+let gameStarted = false;
+let gameOver = false;
+let animId;
+let scoreTimeout = null;
+
+const CHAOS_EVENTS = [
+  { name: '🔀 CONTROLES INVERTIDOS!',  fn: invertControls },
+  { name: '🌍 GRAVIDADE ATIVADA!',      fn: enableGravity },
+  { name: '🏀 BOLA GIGANTE!',           fn: bigBall },
+  { name: '🔴 BOLA MINÚSCULA!',         fn: smallBall },
+  { name: '⚡ TURBO!',                  fn: turbo },
+  { name: '🐢 LENTIDÃO!',              fn: slow },
+  { name: '📏 RAQUETE PEQUENA!',        fn: smallPaddles },
+  { name: '📐 RAQUETE GRANDE!',         fn: bigPaddles },
+  { name: '🌀 BOLA DUPLICADA!',         fn: doubleBall },
+  { name: '🎨 PSICODÉLICO!',            fn: psychedelic },
+  { name: '↔ CAMPO ESPELHADO!',         fn: mirrorField },
+  { name: '🏃 JOGADORES TURBO!',        fn: fastPaddles },
+  { name: '🌀 CAMPO GIRANDO!',          fn: rotateField },
+];
+
+// Paddles
+let pads = [];
+
+// Ball(s)
+let balls = [];
+
+// Active chaos effects (frames remaining)
+let effects = {};
+
+function resetEffects() {
+  effects = { invertedP1: 0, invertedP2: 0, gravity: 0, psychedelic: 0, mirror: 0, fastPads: 0, fieldRotation: 0 };
+  fieldRotAngle = 0;
+}
+
+let chaosMsgTimer = 0;
+let bgFlash = 0;
+let hitCount = 0;
+let shakeFrames = 0;
+let fieldRotAngle = 0;
+
+const keys = {};
+
+// ── Input ──────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if ((e.code === 'KeyP' || e.code === 'Enter') && gameStarted && !gameOver) {
+    paused = !paused;
+    if (!paused) loop();
+  }
+  if (e.code === 'Enter' && gameOver) startGame();
+  if (['ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+
+// ── Init ───────────────────────────────────────────────
+function startGame() {
+  // Reset overlay for next game
+  document.getElementById('overlay-title').style.display = 'none';
+  document.getElementById('overlay-winner').style.display = 'none';
+  document.getElementById('overlay-sub1').style.display = '';
+  document.getElementById('overlay-sub2').style.display = '';
+  document.querySelector('#overlay h1').style.display = '';
+  document.getElementById('start-btn').textContent = 'JOGAR';
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('ctrl-j2').textContent = gameMode === 'pve' ? 'IA' : 'J2: ↑/↓';
+  gameStarted = true;
+  gameOver = false;
+  paused = false;
+  score = [0, 0];
+  updateScore();
+  resetEffects();
+  hitCount = 0;
+  aiTargetY = H / 2;
+  aiErrorTimer = 0;
+  resetPads();
+  balls = [makeBall()];
+  if (animId) cancelAnimationFrame(animId);
+  loop();
+}
+
+function resetPads() {
+  pads[0] = { x: 20,          y: H/2-40, w: PAD_W, h: 80, dy: 0 };
+  pads[1] = { x: W-20-PAD_W,  y: H/2-40, w: PAD_W, h: 80, dy: 0 };
+}
+
+function makeBall(x, y, vx, vy) {
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  return {
+    x: x ?? W/2,
+    y: y ?? H/2 + (Math.random()-0.5)*100,
+    vx: vx ?? dir * (4 + Math.random()*2),
+    vy: vy ?? (Math.random()-0.5)*5,
+    r: 10,
+    color: randomColor(),
+    trail: [],
+  };
+}
+
+function randomColor() {
+  const h = Math.floor(Math.random()*360);
+  return `hsl(${h},100%,60%)`;
+}
+
+// ── Chaos Triggers ─────────────────────────────────────
+function triggerChaos() {
+  const ev = CHAOS_EVENTS[Math.floor(Math.random() * CHAOS_EVENTS.length)];
+  ev.fn();
+  showChaos(ev.name);
+  bgFlash = 12;
+  shakeFrames = 8;
+}
+
+function showChaos(msg) {
+  chaosMsgTimer = 180;
+  document.getElementById('chaos-msg').textContent = msg;
+}
+
+function invertControls() {
+  effects.invertedP1 = 300 + Math.random()*200 | 0;
+  effects.invertedP2 = 300 + Math.random()*200 | 0;
+}
+function enableGravity()  { effects.gravity     = 400 + Math.random()*300 | 0; }
+function bigBall()        { balls.forEach(b => b.r = 24); }
+function smallBall()      { balls.forEach(b => b.r = 4);  }
+function turbo()          { balls.forEach(b => { const s = Math.hypot(b.vx, b.vy); if (s < 14) { b.vx *= 1.6; b.vy *= 1.6; } }); }
+function slow()           { balls.forEach(b => { b.vx *= 0.5; b.vy *= 0.5; }); }
+function smallPaddles()   { pads.forEach(p => p.h = 35); }
+function bigPaddles()     { pads.forEach(p => p.h = 130); }
+function fastPaddles()    { effects.fastPads = 300 + Math.random()*200 | 0; }
+function doubleBall() {
+  if (balls.length < 3) {
+    const b = balls[0];
+    balls.push(makeBall(b.x, b.y, -b.vx * 0.9, b.vy + (Math.random()-0.5)*4));
+  }
+}
+function psychedelic() { effects.psychedelic = 300 + Math.random()*200 | 0; }
+function mirrorField()  { effects.mirror = 200 + Math.random()*200 | 0; }
+function rotateField()  { effects.fieldRotation = 350 + Math.random()*200 | 0; }
+
+// ── Update ─────────────────────────────────────────────
+function update() {
+  for (const k in effects) if (effects[k] > 0) effects[k]--;
+  if (effects.fieldRotation > 0) fieldRotAngle += 0.016;
+  if (chaosMsgTimer > 0) { chaosMsgTimer--; if (chaosMsgTimer === 0) document.getElementById('chaos-msg').textContent = ''; }
+  if (bgFlash > 0) bgFlash--;
+  if (shakeFrames > 0) shakeFrames--;
+
+  movePaddles();
+  balls.forEach(b => updateBall(b));
+  if (balls.length > 3) balls.splice(3);
+}
+
+function movePaddles() {
+  const spd = effects.fastPads > 0 ? PAD_SPEED * 2 : PAD_SPEED;
+  const inv1 = effects.invertedP1 > 0 ? -1 : 1;
+  const inv2 = effects.invertedP2 > 0 ? -1 : 1;
+
+  if (keys['KeyW'])           pads[0].dy = -spd * inv1;
+  else if (keys['KeyS'])      pads[0].dy =  spd * inv1;
+  else                        pads[0].dy = 0;
+
+  if (gameMode === 'pvp') {
+    if (keys['ArrowUp'])        pads[1].dy = -spd * inv2;
+    else if (keys['ArrowDown']) pads[1].dy =  spd * inv2;
+    else                        pads[1].dy = 0;
+  } else {
+    moveAI(spd);
+  }
+
+  pads.forEach(p => {
+    p.y = Math.max(0, Math.min(H - p.h, p.y + p.dy));
+  });
+}
+
+function predictBallY(b) {
+  if (b.vx <= 0) return b.y;
+  let bx = b.x, by = b.y, vy = b.vy;
+  const dist = pads[1].x - bx;
+  if (dist <= 0) return by;
+  const steps = dist / b.vx;
+  by += vy * steps;
+  // Reflect off walls
+  while (by < 0 || by > H) {
+    if (by < 0) by = -by;
+    if (by > H) by = 2 * H - by;
+  }
+  return by;
+}
+
+let aiTargetY = H / 2;
+let aiErrorTimer = 0;
+
+function moveAI(spd) {
+  const params = AI_PARAMS[aiDiff];
+  const pad = pads[1];
+  const inv = effects.invertedP2 > 0 ? -1 : 1;
+
+  // Recalculate target every ~40 frames to feel natural
+  if (aiErrorTimer <= 0) {
+    const target = balls.reduce((best, b) => {
+      if (!best || (b.vx > 0 && b.x > best.x)) return b;
+      return best;
+    }, null);
+    aiTargetY = target ? predictBallY(target) : H / 2;
+    // Add imprecision
+    aiTargetY += (Math.random() - 0.5) * params.errorRange * 2;
+    aiErrorTimer = 15 + Math.random() * 20 | 0;
+  }
+  aiErrorTimer--;
+
+  const aiCenter = pad.y + pad.h / 2;
+  const diff = aiTargetY - aiCenter;
+  const aiSpd = spd * params.speedMult;
+  const move = Math.sign(diff) * Math.min(Math.abs(diff), aiSpd) * inv;
+  pad.dy = move;
+}
+
+function updateBall(b) {
+  b.trail.push({x: b.x, y: b.y});
+  if (b.trail.length > 8) b.trail.shift();
+
+  if (effects.gravity > 0) b.vy += 0.18;
+  if (effects.mirror > 0 && Math.random() < 0.008) b.vy *= -1;
+
+  b.x += b.vx;
+  b.y += b.vy;
+
+  if (b.y - b.r <= 0)   { b.y = b.r;   b.vy =  Math.abs(b.vy); }
+  if (b.y + b.r >= H)   { b.y = H-b.r; b.vy = -Math.abs(b.vy); }
+
+  for (let i = 0; i < 2; i++) {
+    if (padHit(b, pads[i])) {
+      const pad = pads[i];
+      const hitPos = (b.y - (pad.y + pad.h/2)) / (pad.h/2);
+      const angle  = hitPos * 60 * Math.PI/180;
+      const padMoving = Math.abs(pad.dy) > 0;
+      const movingBonus = padMoving ? 2.2 : 0;
+      const speed  = Math.min(Math.hypot(b.vx, b.vy) + 0.2 + movingBonus, 18);
+      b.vx = (i === 0 ? 1 : -1) * speed * Math.cos(angle);
+      b.vy = speed * Math.sin(angle) + (padMoving ? pad.dy * 0.4 : 0);
+      b.x  = i === 0 ? pad.x + pad.w + b.r + 1 : pad.x - b.r - 1;
+      b.color = randomColor();
+      if (padMoving) { shakeFrames = 5; showChaos('💥 SMASH!'); chaosMsgTimer = 60; }
+      hitCount++;
+      if (hitCount % 2 === 0) triggerChaos();
+    }
+  }
+}
+
+function padHit(b, p) {
+  return b.x - b.r < p.x + p.w &&
+         b.x + b.r > p.x &&
+         b.y - b.r < p.y + p.h &&
+         b.y + b.r > p.y;
+}
+
+// ── Draw ───────────────────────────────────────────────
+function draw() {
+  // Screen shake
+  if (shakeFrames > 0) {
+    ctx.save();
+    ctx.translate((Math.random()-0.5)*6, (Math.random()-0.5)*6);
+  }
+
+  // Field rotation
+  if (effects.fieldRotation > 0) {
+    ctx.save();
+    ctx.translate(W/2, H/2);
+    ctx.rotate(fieldRotAngle);
+    ctx.translate(-W/2, -H/2);
+  }
+
+  if (effects.psychedelic > 0) {
+    ctx.fillStyle = `hsl(${(Date.now()/5)%360},60%,8%)`;
+  } else if (bgFlash > 0) {
+    ctx.fillStyle = `rgba(80,0,80,${bgFlash/12*0.6})`;
+  } else {
+    ctx.fillStyle = '#0a0a0a';
+  }
+  ctx.fillRect(0, 0, W, H);
+
+  // Center line
+  ctx.setLineDash([10, 15]);
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Paddles
+  pads.forEach((p, i) => {
+    const c1 = effects[`invertedP${i+1}`] > 0 ? '#f00' : (i === 0 ? '#4af' : '#fa4');
+    const grd = ctx.createLinearGradient(p.x, p.y, p.x + p.w, p.y + p.h);
+    grd.addColorStop(0, c1); grd.addColorStop(1, '#fff');
+    ctx.fillStyle = grd;
+    ctx.shadowColor = c1; ctx.shadowBlur = 15;
+    roundRect(p.x, p.y, p.w, p.h, 4);
+    ctx.shadowBlur = 0;
+  });
+
+  // Balls + trails
+  balls.forEach(b => {
+    b.trail.forEach((t, i) => {
+      ctx.globalAlpha = (i+1) / b.trail.length * 0.35;
+      ctx.fillStyle = b.color;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, b.r * ((i+1)/b.trail.length), 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    ctx.shadowColor = b.color; ctx.shadowBlur = 20;
+    ctx.fillStyle = b.color;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+  });
+
+  if (effects.invertedP1 > 0 || effects.invertedP2 > 0) {
+    ctx.fillStyle = 'rgba(255,0,0,0.1)';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Pause overlay
+  if (paused) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ff0';
+    ctx.font = 'bold 48px Courier New';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#ff0'; ctx.shadowBlur = 20;
+    ctx.fillText('PAUSADO', W/2, H/2);
+    ctx.font = '16px Courier New';
+    ctx.fillStyle = '#aaa'; ctx.shadowBlur = 0;
+    ctx.fillText('P ou ENTER para continuar', W/2, H/2 + 40);
+    ctx.textAlign = 'left';
+  }
+
+  if (effects.fieldRotation > 0) ctx.restore();
+  if (shakeFrames > 0) ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y,   x+w, y+r,   r);
+  ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+  ctx.lineTo(x+r, y+h); ctx.arcTo(x, y+h, x, y+h-r, r);
+  ctx.lineTo(x, y+r); ctx.arcTo(x, y,   x+r, y,   r);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function updateScore() {
+  document.getElementById('s1').textContent = score[0];
+  document.getElementById('s2').textContent = score[1];
+}
+
+function checkWin() {
+  const winner = score[0] >= WIN_SCORE ? 0 : score[1] >= WIN_SCORE ? 1 : -1;
+  if (winner === -1) return false;
+  gameOver = true;
+  cancelAnimationFrame(animId);
+  draw(); // final frame
+
+  const ov = document.getElementById('overlay');
+  document.getElementById('overlay-title').style.display = 'block';
+  const names = gameMode === 'pve' ? ['JOGADOR', 'IA'] : ['JOGADOR 1', 'JOGADOR 2'];
+  document.getElementById('overlay-title').textContent = `🏆 ${names[winner]} VENCEU!`;
+  document.getElementById('overlay-winner').style.display = 'block';
+  document.getElementById('overlay-winner').textContent = `Placar: ${score[0]} x ${score[1]}`;
+  document.getElementById('overlay-sub1').style.display = 'none';
+  document.getElementById('overlay-sub2').style.display = 'none';
+  document.querySelector('#overlay h1').style.display = 'none';
+  document.getElementById('start-btn').textContent = 'JOGAR DE NOVO';
+  ov.style.display = 'flex';
+  return true;
+}
+
+// ── Loop ───────────────────────────────────────────────
+function loop() {
+  if (paused || gameOver) return;
+  update();
+
+  // Detect scored balls
+  const dead = [];
+  balls.forEach((b, i) => {
+    if (b.x + b.r < 0) { score[1]++; dead.push(i); }
+    else if (b.x - b.r > W) { score[0]++; dead.push(i); }
+  });
+  dead.reverse().forEach(i => balls.splice(i, 1));
+
+  if (dead.length) {
+    updateScore();
+    if (checkWin()) return;
+    if (balls.length === 0) {
+      clearTimeout(scoreTimeout);
+      scoreTimeout = setTimeout(() => {
+        if (gameOver) return;
+        resetPads();
+        resetEffects();
+        balls = [makeBall()];
+        document.getElementById('chaos-msg').textContent = '';
+        hitCount = 0;
+      }, 800);
+    }
+  }
+
+  draw();
+  animId = requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

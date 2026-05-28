@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pong Caótico</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0e0e1a;
+    color: #fff;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 14px;
+    padding: 20px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #fff;
+  }
+  h1 span { color: #ff4de3; }
+  #score-bar {
+    display: flex;
+    gap: 48px;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+  #score-bar .label { font-size: 12px; color: #888; text-align: center; display: block; margin-bottom: 2px; }
+  .p1-color { color: #4df0ff; }
+  .p2-color { color: #7dff4d; }
+  .sep { color: #444; align-self: center; }
+  canvas {
+    display: block;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    background: #0a0a12;
+  }
+  #chaos-msg {
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 22px;
+    color: #ffe04d;
+    letter-spacing: 0.04em;
+    text-align: center;
+    min-width: 400px;
+  }
+  #controls {
+    display: flex;
+    gap: 40px;
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+  }
+  #controls div { line-height: 1.8; }
+  #controls strong { color: #999; display: block; margin-bottom: 2px; }
+  #speed-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: #888;
+  }
+  #speed-row label { white-space: nowrap; }
+  #speed-input {
+    width: 64px;
+    padding: 6px 10px;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #fff;
+    text-align: center;
+  }
+  #speed-input:focus { outline: none; border-color: #4df0ff66; }
+  #speed-range { width: 140px; accent-color: #4df0ff; cursor: pointer; }
+  #speed-val { min-width: 28px; color: #4df0ff; font-weight: 700; text-align: right; }
+  #btn-row { display: flex; gap: 12px; }
+  button {
+    padding: 9px 28px;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #1a1a2e;
+    color: #fff;
+    transition: background 0.15s;
+  }
+  button:hover { background: #252540; }
+  button#reset-btn { border-color: #ff4de355; color: #ff4de3; }
+  button#reset-btn:hover { background: #2e1a2e; }
+  details#chaos-panel {
+    width: 700px;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    background: #12121e;
+    padding: 0;
+    font-size: 12px;
+  }
+  details#chaos-panel summary {
+    padding: 8px 14px;
+    cursor: pointer;
+    color: #888;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  details#chaos-panel summary::-webkit-details-marker { display: none; }
+  details#chaos-panel summary::before { content: '▶'; font-size: 10px; transition: transform 0.2s; }
+  details#chaos-panel[open] summary::before { transform: rotate(90deg); }
+  details#chaos-panel summary:hover { color: #ccc; }
+  #chaos-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px 10px;
+    padding: 10px 14px 14px;
+    border-top: 1px solid #1e1e2e;
+  }
+  .chaos-cb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #aaa;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .chaos-cb input { accent-color: #ffe04d; cursor: pointer; flex-shrink: 0; }
+  .chaos-cb:hover { color: #fff; }
+  #cb-actions {
+    display: flex;
+    gap: 8px;
+    padding: 0 14px 10px;
+  }
+  #cb-actions button {
+    padding: 4px 12px;
+    font-size: 11px;
+    border-color: #333;
+  }
+</style>
+</head>
+<body>
+
+<h1>Pong <span>Caótico</span></h1>
+
+<div id="score-bar">
+  <div>
+    <span class="label">P1</span>
+    <span class="p1-color" id="p1score">0</span>
+  </div>
+  <span class="sep">:</span>
+  <div>
+    <span class="label">P2</span>
+    <span class="p2-color" id="p2score">0</span>
+  </div>
+</div>
+
+<canvas id="canvas" width="700" height="420"></canvas>
+
+<div id="chaos-msg">Pressione Iniciar para jogar</div>
+
+<div id="controls">
+  <div><strong>Jogador 1</strong>W = cima<br>S = baixo</div>
+  <div><strong>Jogador 2</strong>🤖 controlado por IA</div>
+</div>
+
+<div id="speed-row">
+  <label for="speed-range">Velocidade inicial</label>
+  <input type="range" id="speed-range" min="1" max="10" step="0.5" value="2.5">
+  <span id="speed-val">2.5</span>
+</div>
+
+<details id="chaos-panel">
+  <summary>⚙ Tipos de caos ativos</summary>
+  <div id="cb-actions">
+    <button id="cb-all">Marcar todos</button>
+    <button id="cb-none">Desmarcar todos</button>
+  </div>
+  <div id="chaos-grid">
+    <label class="chaos-cb"><input type="checkbox" id="cb_size_up"    checked> 🔴 Maior</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_size_down"  checked> 🔵 Menor</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_invert_p1"  checked> ↕ Inverte P1</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_invert_p2"  checked> ↕ Inverte P2</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_grav_down"  checked> ↓ Gravidade</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_grav_up"    checked> ↑ Grav. invertida</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_grav_zero"  checked> ⭕ Sem gravidade</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_bg_flash"   checked> ✦ Fundo pisca</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_speed_up"   checked> ⚡ Acelera</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_speed_down" checked> 🐌 Desacelera</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_color"      checked> 🎨 Muda cor</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_multiply"      checked> ✳️ Multiplica</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_multiply_bomb" checked> 💣✳️ Mult. bomba</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_bomb"          checked> 💣 Bomba</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_invisible"     checked> 👁 Invisível</label>
+    <label class="chaos-cb"><input type="checkbox" id="cb_shrink_paddle" checked> 📉 Raquete encolhe</label>
+  </div>
+</details>
+
+<div id="btn-row">
+  <button id="start-btn">▶ Iniciar</button>
+  <button id="reset-btn">↺ Resetar</button>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const chaosEl = document.getElementById('chaos-msg');
+const p1El = document.getElementById('p1score');
+const p2El = document.getElementById('p2score');
+const startBtn = document.getElementById('start-btn');
+const resetBtn = document.getElementById('reset-btn');
+const speedRange = document.getElementById('speed-range');
+const speedVal = document.getElementById('speed-val');
+
+speedRange.addEventListener('input', () => {
+  speedVal.textContent = parseFloat(speedRange.value).toFixed(1);
+});
+function getBaseSpeed() { return parseFloat(speedRange.value); }
+
+const PADDLE_W = 13, PADDLE_H = 72;
+const P1X = 22, P2X = W - 22 - PADDLE_W;
+const MAX_BALLS = 8;
+const BALL_COLORS = ['#ffffff','#ff4de3','#4df0ff','#ffe04d','#7dff4d','#ff7d4d','#c084fc','#f97316'];
+
+let running = false;
+let gameOver = false;
+let gameOverWinner = '';
+let particles = [];
+let spawnQueue = [];
+let bombPulse = 0;
+let state = {};
+
+function makeBall(dirX) {
+  const spd = getBaseSpeed();
+  return {
+    x: W/2, y: H/2 + (Math.random()-0.5)*60,
+    r: 10, isBomb: false, isInvisible: false,
+    vx: spd * (dirX || (Math.random()<.5?1:-1)),
+    vy: spd * 0.65 * (Math.random()<.5?1:-1),
+    color: BALL_COLORS[Math.floor(Math.random()*BALL_COLORS.length)],
+  };
+}
+
+function resetState() {
+  state = {
+    balls: [makeBall()],
+    p1: { y: H/2 - PADDLE_H/2, h: PADDLE_H, score: 0, invertY: false },
+    p2: { y: H/2 - PADDLE_H/2, h: PADDLE_H, score: 0, invertY: false },
+    gravity: 0, bgFlashTimer: 0,
+    flashColor: '#0a0a12', invertedTimer: 0,
+  };
+  particles = [];
+  gameOver = false;
+  gameOverWinner = '';
+  p1El.textContent = 0;
+  p2El.textContent = 0;
+  showMsg('Pressione Iniciar para jogar');
+}
+resetState();
+
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if(['ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+function spawnExplosion(x, y) {
+  const COLORS = ['#ff4500','#ff7700','#ffaa00','#ffdd00','#fff','#ff2200'];
+  for(let i = 0; i < 72; i++) {
+    const angle = (Math.PI * 2 / 72) * i + (Math.random()-0.5)*0.3;
+    const spd = 2 + Math.random() * 7;
+    const size = 2 + Math.random() * 5;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * spd,
+      vy: Math.sin(angle) * spd,
+      life: 1.0,
+      decay: 0.018 + Math.random()*0.022,
+      size,
+      color: COLORS[Math.floor(Math.random()*COLORS.length)],
+      type: Math.random() < 0.3 ? 'spark' : 'circle',
+    });
+  }
+  for(let i = 0; i < 12; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * (1 + Math.random()*3),
+      vy: Math.sin(angle) * (1 + Math.random()*3) - 2,
+      life: 1.0,
+      decay: 0.008 + Math.random()*0.01,
+      size: 6 + Math.random()*10,
+      color: '#ff6600',
+      type: 'smoke',
+    });
+  }
+}
+
+function updateParticles() {
+  particles = particles.filter(p => {
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.08;
+    p.vx *= 0.97;
+    p.life -= p.decay;
+    return p.life > 0;
+  });
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, p.life);
+    if(p.type === 'smoke') {
+      ctx.fillStyle = `rgba(180,80,0,${p.life * 0.4})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * (1.5 - p.life*0.5), 0, Math.PI*2);
+      ctx.fill();
+    } else if(p.type === 'spark') {
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - p.vx*3, p.y - p.vy*3);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+
+function triggerBombExplosion(bx, by, loserLabel) {
+  spawnExplosion(bx, by);
+  running = false;
+  gameOver = true;
+  gameOverWinner = loserLabel;
+  startBtn.textContent = '▶ Iniciar';
+  showMsg('💥  GAME OVER!');
+}
+
+function multiplyBall(s, b) {
+  const copies = Math.floor(Math.random()*2) + 2;
+  const toAdd = Math.min(copies, MAX_BALLS - s.balls.length - spawnQueue.length);
+  if(toAdd <= 0) { showMsg('✳️  Já cheio de bolas!'); return; }
+  const speed = Math.hypot(b.vx, b.vy);
+  const dirX = Math.sign(b.vx);
+  const totalAngles = toAdd + 1;
+  for(let i = 0; i < toAdd; i++) {
+    const t = (i + 1) / totalAngles;
+    const spread = (t - 0.5) * Math.PI * 1.1 + (Math.random()-0.5)*0.18;
+    spawnQueue.push({
+      x: b.x, y: b.y,
+      r: Math.max(6, b.r-2), isBomb: false, isInvisible: false,
+      vx: dirX * speed * Math.cos(spread),
+      vy: speed * Math.sin(spread),
+      color: BALL_COLORS[Math.floor(Math.random()*BALL_COLORS.length)],
+    });
+  }
+  showMsg(`✳️  Bola se multiplicou! (+${toAdd})`);
+}
+
+function multiplyBallWithBomb(s, b) {
+  const copies = Math.floor(Math.random()*2) + 2;
+  const toAdd = Math.min(copies, MAX_BALLS - s.balls.length - spawnQueue.length);
+  if(toAdd <= 0) { showMsg('💣✳️  Já cheio de bolas!'); return; }
+  const speed = Math.hypot(b.vx, b.vy);
+  const dirX = Math.sign(b.vx);
+  const bombIdx = Math.floor(Math.random()*toAdd);
+  const totalAngles = toAdd + 1;
+  for(let i = 0; i < toAdd; i++) {
+    const t = (i + 1) / totalAngles;
+    const spread = (t - 0.5) * Math.PI * 1.1 + (Math.random()-0.5)*0.18;
+    const isBombClone = (i === bombIdx);
+    spawnQueue.push({
+      x: b.x, y: b.y,
+      r: Math.max(6, b.r-2), isBomb: isBombClone, isInvisible: false,
+      vx: dirX * speed * Math.cos(spread),
+      vy: speed * Math.sin(spread),
+      color: isBombClone ? '#ff2200' : BALL_COLORS[Math.floor(Math.random()*BALL_COLORS.length)],
+    });
+  }
+  showMsg(`💣✳️  Uma das bolas é uma BOMBA! (+${toAdd})`);
+}
+
+const CHAOS_EVENTS = [
+  { id:'size_up',    label:'🔴  Bola ficou maior!',        fn:(s,b)=>{ b.r=Math.min(22,b.r+6); } },
+  { id:'size_down',  label:'🔵  Bola ficou menor!',         fn:(s,b)=>{ b.r=Math.max(5,b.r-5); } },
+  { id:'invert_p1',  label:'↕   Controles P1 invertidos!',  fn:(s)  =>{ s.p1.invertY=true; s.invertedTimer=220; } },
+  { id:'invert_p2',  label:'↕   Controles P2 invertidos!',  fn:(s)  =>{ s.p2.invertY=true; s.invertedTimer=220; } },
+  { id:'grav_down',  label:'↓   Gravidade ativada!',        fn:(s)  =>{ s.gravity=0.20; } },
+  { id:'grav_up',    label:'↑   Gravidade invertida!',      fn:(s)  =>{ s.gravity=-0.16; } },
+  { id:'grav_zero',  label:'⭕  Gravidade zerada!',          fn:(s)  =>{ s.gravity=0; } },
+  { id:'bg_flash',   label:'✦   Fundo piscando!',           fn:(s)  =>{ s.bgFlashTimer=100; s.flashColor=['#1a0a2e','#0a1a2e','#1a2e0a','#2e0a0a','#2e2a0a'][Math.floor(Math.random()*5)]; } },
+  { id:'speed_up',   label:'⚡  Bola acelerou!',            fn:(s,b)=>{ b.vx*=1.3; b.vy*=1.3; } },
+  { id:'speed_down', label:'🐌  Bola desacelerou!',         fn:(s,b)=>{ b.vx*=0.65; b.vy*=0.65; const m=Math.max(1,getBaseSpeed()*0.4); if(Math.abs(b.vx)<m) b.vx=m*Math.sign(b.vx); } },
+  { id:'color',      label:'🎨  Cor da bola mudou!',        fn:(s,b)=>{ b.color=BALL_COLORS[Math.floor(Math.random()*BALL_COLORS.length)]; } },
+  { id:'multiply',      label:'✳️  Bola se multiplicou!',          fn:(s,b)=>{ multiplyBall(s,b); }, noMsg:true },
+  { id:'multiply_bomb', label:'💣✳️ Multiplica com bomba!',         fn:(s,b)=>{ multiplyBallWithBomb(s,b); }, noMsg:true },
+  { id:'bomb',          label:'💣  BOMBA! Não deixe tocar!',        fn:(s,b)=>{ if(!b.isBomb){ b.isBomb=true; b.color='#ff2200'; } } },
+  { id:'invisible',     label:'👁  Bola ficou invisível!',          fn:(s,b)=>{ b.isInvisible=true; } },
+];
+
+function isEnabled(id) { const el=document.getElementById('cb_'+id); return el?el.checked:true; }
+
+function triggerChaos(ball) {
+  if(ball.isBomb) return;
+  const pool = CHAOS_EVENTS.filter(e => isEnabled(e.id));
+  if(pool.length === 0) return;
+  const ev = pool[Math.floor(Math.random()*pool.length)];
+  ev.fn(state, ball);
+  if(!ev.noMsg) showMsg(ev.label);
+}
+
+document.getElementById('cb-all').addEventListener('click', () => {
+  CHAOS_EVENTS.forEach(e => { const el=document.getElementById('cb_'+e.id); if(el) el.checked=true; });
+});
+document.getElementById('cb-none').addEventListener('click', () => {
+  CHAOS_EVENTS.forEach(e => { const el=document.getElementById('cb_'+e.id); if(el) el.checked=false; });
+});
+
+function showMsg(m) { chaosEl.textContent = m; }
+
+function resetBalls(lastDirX) {
+  state.balls = [makeBall(lastDirX)];
+  state.gravity = 0;
+  state.p1.invertY = false;
+  state.p2.invertY = false;
+  state.invertedTimer = 0;
+}
+
+function update() {
+  bombPulse += 0.12;
+  updateParticles();
+  if(!running) return;
+  const s = state;
+  spawnQueue = [];
+
+  const sp = 5.5;
+  if(keys['w']||keys['W']) s.p1.y += (s.p1.invertY?1:-1)*sp;
+  if(keys['s']||keys['S']) s.p1.y += (s.p1.invertY?-1:1)*sp;
+  s.p1.y = Math.max(0, Math.min(H-s.p1.h, s.p1.y));
+
+  // AI for P2: track the ball heading toward it, with reaction speed tied to paddle size
+  const aiSpeed = 3.5 + (PADDLE_H - s.p2.h) * 0.04;
+  const threatBall = s.balls.filter(b => !b.isInvisible && b.vx > 0)
+    .sort((a,b) => b.x - a.x)[0] || s.balls.filter(b => !b.isInvisible)[0] || s.balls[0];
+  if(threatBall) {
+    const targetY = threatBall.y - s.p2.h / 2;
+    const diff = targetY - s.p2.y;
+    const dir = s.p2.invertY ? -1 : 1;
+    s.p2.y += Math.sign(diff) * Math.min(Math.abs(diff), aiSpeed) * dir;
+  }
+  s.p2.y = Math.max(0, Math.min(H-s.p2.h, s.p2.y));
+
+  if(s.invertedTimer>0){ s.invertedTimer--; if(s.invertedTimer===0){s.p1.invertY=false;s.p2.invertY=false;} }
+  if(s.bgFlashTimer>0) s.bgFlashTimer--;
+
+  let scoredP1=false, scoredP2=false;
+
+  s.balls = s.balls.filter(b => {
+    b.vy += s.gravity;
+    b.x += b.vx; b.y += b.vy;
+
+    const hitTop    = b.y - b.r < 0;
+    const hitBottom = b.y + b.r > H;
+    if(hitTop)    { b.y=b.r;    b.vy*=-1; if(b.isBomb){ b.isBomb=false; b.color=BALL_COLORS[Math.floor(Math.random()*BALL_COLORS.length)]; showMsg('💨  Bomba desarmada na parede!'); } }
+    if(hitBottom) { b.y=H-b.r;  b.vy*=-1; if(b.isBomb){ b.isBomb=false; b.color=BALL_COLORS[Math.floor(Math.random()*BALL_COLORS.length)]; showMsg('💨  Bomba desarmada na parede!'); } }
+
+    if(b.vx<0 && b.x-b.r<=P1X+PADDLE_W && b.x-b.r>=P1X-2 && b.y>=s.p1.y && b.y<=s.p1.y+s.p1.h) {
+      if(b.isInvisible) { b.isInvisible=false; b.vx=Math.abs(b.vx); b.x=P1X+PADDLE_W+b.r+1; showMsg('👁  Bola revelada!'); return true; }
+      if(b.isBomb) { triggerBombExplosion(b.x,b.y,'P1 perdeu!'); return false; }
+      b.vx=Math.abs(b.vx); b.x=P1X+PADDLE_W+b.r+1;
+      if(isEnabled('shrink_paddle')) {
+        s.p1.h = Math.min(160, s.p1.h + 8); 
+        s.p2.h = Math.max(20,  s.p2.h - 8); s.p2.y = Math.min(s.p2.y, H - s.p2.h);
+      }
+      triggerChaos(b);
+    }
+    if(b.vx>0 && b.x+b.r>=P2X && b.x+b.r<=P2X+PADDLE_W+2 && b.y>=s.p2.y && b.y<=s.p2.y+s.p2.h) {
+      if(b.isInvisible) { b.isInvisible=false; b.vx=-Math.abs(b.vx); b.x=P2X-b.r-1; showMsg('👁  Bola revelada!'); return true; }
+      if(b.isBomb) { triggerBombExplosion(b.x,b.y,'P2 perdeu!'); return false; }
+      b.vx=-Math.abs(b.vx); b.x=P2X-b.r-1;
+      if(isEnabled('shrink_paddle')) {
+        s.p2.h = Math.min(160, s.p2.h + 8);
+        s.p1.h = Math.max(20,  s.p1.h - 8); s.p1.y = Math.min(s.p1.y, H - s.p1.h);
+      }
+      triggerChaos(b);
+    }
+
+    if(b.x < -b.r)  { scoredP2=true; return false; }
+    if(b.x > W+b.r) { scoredP1=true; return false; }
+    return true;
+  });
+
+  if(spawnQueue.length > 0) { s.balls = s.balls.concat(spawnQueue); spawnQueue = []; }
+
+  if(s.balls.length===0 && !gameOver) {
+    if(scoredP2){ s.p2.score++; p2El.textContent=s.p2.score; resetBalls(-1); showMsg('Ponto para P2! ▸▸'); }
+    else        { s.p1.score++; p1El.textContent=s.p1.score; resetBalls(1);  showMsg('◂◂ Ponto para P1!'); }
+  }
+}
+
+function drawBomb(b) {
+  const pulse = 0.7 + 0.3*Math.sin(bombPulse*3);
+  ctx.save();
+  ctx.shadowColor='#ff2200';
+  ctx.shadowBlur = 18*pulse;
+  ctx.fillStyle='#1a0000';
+  ctx.beginPath(); ctx.arc(b.x, b.y, b.r+2, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle='#cc0000';
+  ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ff4400';
+  ctx.beginPath(); ctx.arc(b.x-b.r*0.25, b.y-b.r*0.25, b.r*0.35, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.strokeStyle='#ffcc00';
+  ctx.lineWidth=2;
+  const fx=b.x+b.r*0.6, fy=b.y-b.r*0.7;
+  ctx.beginPath();
+  ctx.moveTo(fx, fy);
+  ctx.bezierCurveTo(fx+6, fy-8, fx+12, fy-4, fx+10, fy-14);
+  ctx.stroke();
+  const flameAlpha = 0.6+0.4*Math.sin(bombPulse*8);
+  ctx.fillStyle=`rgba(255,${Math.floor(140+80*Math.sin(bombPulse*8))},0,${flameAlpha})`;
+  ctx.beginPath(); ctx.arc(fx+10, fy-14, 3*pulse, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function draw() {
+  const s = state;
+  const flashOn = s.bgFlashTimer>0 && Math.floor(s.bgFlashTimer/8)%2===0;
+  ctx.fillStyle = flashOn ? s.flashColor : '#0a0a12';
+  ctx.fillRect(0,0,W,H);
+
+  ctx.setLineDash([10,10]);
+  ctx.strokeStyle='rgba(255,255,255,0.10)';
+  ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = s.p1.invertY ? '#ff4de3' : '#4df0ff';
+  ctx.beginPath(); ctx.roundRect(P1X, s.p1.y, PADDLE_W, s.p1.h, 4); ctx.fill();
+  ctx.fillStyle = s.p2.invertY ? '#ff4de3' : '#7dff4d';
+  ctx.beginPath(); ctx.roundRect(P2X, s.p2.y, PADDLE_W, s.p2.h, 4); ctx.fill();
+  if(s.p1.invertY){ ctx.fillStyle='#ff4de388'; ctx.font='11px Courier New'; ctx.textAlign='center'; ctx.fillText('INVERTIDO',P1X+PADDLE_W/2+34,s.p1.y+s.p1.h/2); }
+  if(s.p2.invertY){ ctx.fillStyle='#ff4de388'; ctx.font='11px Courier New'; ctx.textAlign='center'; ctx.fillText('INVERTIDO',P2X+PADDLE_W/2-34,s.p2.y+s.p2.h/2); }
+  if(isEnabled('shrink_paddle')) {
+    ctx.font='10px Courier New'; ctx.textAlign='center';
+    if(s.p1.h !== PADDLE_H) {
+      const arrow = s.p1.h > PADDLE_H ? '▲' : '▼';
+      ctx.fillStyle = s.p1.h <= 30 ? '#ff4444' : s.p1.h > PADDLE_H ? '#7dff4d' : '#ffffff55';
+      ctx.fillText(`${arrow}${s.p1.h}`, P1X+PADDLE_W/2+18, s.p1.y - 4);
+    }
+    if(s.p2.h !== PADDLE_H) {
+      const arrow = s.p2.h > PADDLE_H ? '▲' : '▼';
+      ctx.fillStyle = s.p2.h <= 30 ? '#ff4444' : s.p2.h > PADDLE_H ? '#7dff4d' : '#ffffff55';
+      ctx.fillText(`${arrow}${s.p2.h}`, P2X+PADDLE_W/2-18, s.p2.y - 4);
+    }
+  }
+
+  s.balls.forEach(b => {
+    if(b.isInvisible) return;
+    if(b.isBomb) { drawBomb(b); return; }
+    ctx.fillStyle = b.color;
+    ctx.shadowColor = b.color;
+    ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+  });
+
+  drawParticles();
+
+  if(s.balls.length > 1) {
+    ctx.fillStyle='rgba(255,255,255,0.35)';
+    ctx.font='12px Courier New'; ctx.textAlign='left';
+    ctx.fillText(`× ${s.balls.length} bolas`, 8, 18);
+  }
+
+  if(gameOver && particles.length < 30) {
+    ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';
+    ctx.font='700 38px Courier New'; ctx.fillStyle='#ff2200';
+    ctx.fillText('GAME OVER', W/2, H/2-28);
+    ctx.font='500 20px Courier New'; ctx.fillStyle='#ffaa00';
+    ctx.fillText(gameOverWinner, W/2, H/2+12);
+    ctx.font='13px Courier New'; ctx.fillStyle='rgba(255,255,255,0.5)';
+    ctx.fillText('Pressione ↺ Resetar para jogar de novo', W/2, H/2+46);
+  }
+
+  if(!running && !gameOver) {
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(255,255,255,0.5)';
+    ctx.font='600 16px Courier New'; ctx.textAlign='center';
+    ctx.fillText('▶  Pressione Iniciar', W/2, H/2);
+  }
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+startBtn.addEventListener('click', () => {
+  if(gameOver) return;
+  if(!running){ running=true; startBtn.textContent='⏸ Pausar'; showMsg('Boa sorte! Algo vai mudar a cada rebatida...'); }
+  else        { running=false; startBtn.textContent='▶ Continuar'; showMsg('⏸  Pausado'); }
+});
+resetBtn.addEventListener('click', () => { running=false; startBtn.textContent='▶ Iniciar'; resetState(); });
+
+loop();
+</script>
+</body>
+</html>
